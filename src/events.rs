@@ -14,6 +14,7 @@ pub enum OrderEvent {
     },
     SolverReservationRequested {
         order_id: OrderId,
+        terms: TradeTerms,
     },
     SolverAssigned {
         order_id: OrderId,
@@ -46,7 +47,7 @@ impl OrderEvent {
         match self {
             Self::OrderCreated { order_id, .. }
             | Self::OrderValidated { order_id }
-            | Self::SolverReservationRequested { order_id }
+            | Self::SolverReservationRequested { order_id, .. }
             | Self::SolverAssigned { order_id, .. }
             | Self::SolverSessionReady { order_id, .. }
             | Self::ProofRelayed { order_id, .. }

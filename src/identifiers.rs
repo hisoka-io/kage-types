@@ -6,3 +6,4 @@ pub type TokenAddress = Address;
 pub type TxHash = B256;
 pub type SolverId = Address;
 pub type OrderCommitment = B256;
+pub type SettlementBinding = B256;

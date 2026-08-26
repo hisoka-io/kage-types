@@ -2,7 +2,7 @@ use alloy_primitives::U256;
 use serde::{Deserialize, Serialize};
 
 use crate::events::OrderEvent;
-use crate::identifiers::{OrderCommitment, OrderId, TokenAddress, TxHash};
+use crate::identifiers::{OrderCommitment, OrderId, SettlementBinding, TokenAddress, TxHash};
 
 pub const ORDER_COMMITMENT_HEADER: &str = "x-order-commitment";
 pub const SOLVER_ADDRESS_HEADER: &str = "x-solver-address";
@@ -35,6 +35,7 @@ pub struct ApiErrorResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EncryptedProofRequest {
     pub ciphertext: Vec<u8>,
+    pub settlement_binding: SettlementBinding,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -1,6 +1,7 @@
 use alloy_primitives::{Address, B256, U256};
 use kage_types::api_types::{
-    ApiErrorResponse, CreateOrderRequest, SolverProofDeliveryV1, UserEventServerMessage,
+    ApiErrorResponse, CreateOrderRequest, EncryptedProofRequest, SolverProofDeliveryV1,
+    UserEventServerMessage,
 };
 use kage_types::events::OrderEvent;
 use kage_types::orders::{OrderState, OrderV1};
@@ -43,6 +44,10 @@ fn api_and_event_messages_round_trip() {
         order_id,
         ciphertext: vec![1, 2, 3],
     };
+    let encrypted = EncryptedProofRequest {
+        ciphertext: vec![4, 5, 6],
+        settlement_binding: B256::repeat_byte(0x66),
+    };
     let event = UserEventServerMessage::Event {
         event: OrderEvent::ProofRelayed {
             order_id,
@@ -57,6 +62,13 @@ fn api_and_event_messages_round_trip() {
     let delivery = serde_json::to_value(delivery).unwrap();
     assert_eq!(delivery["order_id"], order_id.to_string());
     assert_eq!(delivery["ciphertext"], serde_json::json!([1, 2, 3]));
+
+    let encrypted = serde_json::to_value(encrypted).unwrap();
+    assert_eq!(encrypted["ciphertext"], serde_json::json!([4, 5, 6]));
+    assert_eq!(
+        encrypted["settlement_binding"],
+        B256::repeat_byte(0x66).to_string()
+    );
 
     let event = serde_json::to_value(event).unwrap();
     assert_eq!(event["type"], "event");

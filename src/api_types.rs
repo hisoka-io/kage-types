@@ -1,11 +1,11 @@
 use alloy_primitives::U256;
 use serde::{Deserialize, Serialize};
 
+use crate::assignment::AssignmentTicketV1;
 use crate::events::OrderEvent;
-use crate::identifiers::{OrderCommitment, OrderId, SettlementBinding, TokenAddress, TxHash};
+use crate::identifiers::{OrderCommitment, OrderId, TokenAddress};
 
 pub const ORDER_COMMITMENT_HEADER: &str = "x-order-commitment";
-pub const SOLVER_ADDRESS_HEADER: &str = "x-solver-address";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateOrderRequest {
@@ -33,25 +33,22 @@ pub struct ApiErrorResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct EncryptedProofRequest {
+pub struct DirectProofRequestV1 {
+    pub ticket: AssignmentTicketV1,
     pub ciphertext: Vec<u8>,
-    pub settlement_binding: SettlementBinding,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirectProofStatusV1 {
+    Queued,
+    Duplicate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SolverProofDeliveryV1 {
+pub struct DirectProofResponseV1 {
     pub order_id: OrderId,
-    pub ciphertext: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ExecutionStartedRequest {
-    pub tx_hash: TxHash,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SettlementRequest {
-    pub tx_hash: TxHash,
+    pub status: DirectProofStatusV1,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

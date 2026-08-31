@@ -4,7 +4,9 @@ use alloy_primitives::{Address, B256, U256, keccak256};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    identifiers::{EncryptionKeyId, OrderId, PreviewId, SolverId, TokenAddress},
+    identifiers::{
+        EncryptionKeyId, OrderAccessTokenHash, OrderId, PreviewId, SolverId, TokenAddress,
+    },
     orders::TradeTerms,
     routing::{MAX_PROOF_RECIPIENTS, MultiRecipientProof, PreviewRoute},
 };
@@ -49,6 +51,7 @@ pub struct PreviewCategory {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateOrderRequest {
     pub client_order_id: OrderId,
+    pub access_token_hash: OrderAccessTokenHash,
     pub preview_id: PreviewId,
     pub category_id: FeeCategoryId,
     pub terms: TradeTerms,

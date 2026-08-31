@@ -6,6 +6,14 @@ use crate::identifiers::OrderId;
 use crate::proof_orders::ComplaintEvidenceKind;
 
 pub const ORDER_ACCESS_TOKEN_HEADER: &str = "x-order-access-token";
+pub const ORDER_ACCESS_TOKEN_HASH_DOMAIN: &[u8] = b"kage-order-access-token/v1";
+
+pub fn order_access_token_hash(token: B256) -> B256 {
+    let mut bytes = Vec::with_capacity(ORDER_ACCESS_TOKEN_HASH_DOMAIN.len() + token.len());
+    bytes.extend_from_slice(ORDER_ACCESS_TOKEN_HASH_DOMAIN);
+    bytes.extend_from_slice(token.as_slice());
+    alloy_primitives::keccak256(bytes)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateOrderResponse {

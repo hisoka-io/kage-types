@@ -1,5 +1,7 @@
 use alloy_primitives::{Address, B256, U256};
-use kage_types::api_types::{ApiErrorResponse, ComplaintResponse, ComplaintStatus};
+use kage_types::api_types::{
+    ApiErrorResponse, ComplaintResponse, ComplaintStatus, order_access_token_hash,
+};
 use kage_types::proof_orders::{
     AssignmentTicket, AssignmentTicketClaims, ComplaintEvidenceKind, CreateOrderRequest,
     PreviewCategory, ProofOrderBindings, ReservationOffer, ReservationRequest,
@@ -10,6 +12,16 @@ use kage_types::routing::{
     SolverProofDelivery,
 };
 use uuid::Uuid;
+
+#[test]
+fn order_access_token_verifier_has_a_stable_cross_sdk_vector() {
+    assert_eq!(
+        order_access_token_hash(B256::repeat_byte(0xa1)),
+        "0xca33d5250f54387650fe1b53ad805883b083d1bb195da3668a447467e6602737"
+            .parse::<B256>()
+            .unwrap()
+    );
+}
 
 #[test]
 fn complaint_response_preserves_the_evidence_class() {
@@ -73,6 +85,7 @@ fn preview_and_multi_recipient_order_round_trip() {
     };
     let request = CreateOrderRequest {
         client_order_id: Uuid::from_u128(9),
+        access_token_hash: B256::repeat_byte(0xcc),
         preview_id: preview.preview_id,
         category_id: preview.categories[0].id.clone(),
         domain_hash: B256::repeat_byte(0xdd),

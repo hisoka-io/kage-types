@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct IntentProofV1 {
-    pub version: u8,
+pub struct IntentProof {
     pub circuit: String,
     pub proof_system: String,
     pub verifier_target: String,

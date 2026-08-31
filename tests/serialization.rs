@@ -1,72 +1,110 @@
 use alloy_primitives::{Address, B256, U256};
-use kage_types::api_types::{
-    ApiErrorResponse, CreateOrderRequest, DirectProofRequestV1, DirectProofResponseV1,
-    DirectProofStatusV1,
+use kage_types::api_types::{ApiErrorResponse, ComplaintResponse, ComplaintStatus};
+use kage_types::proof_orders::{
+    AssignmentTicket, AssignmentTicketClaims, ComplaintEvidenceKind, CreateOrderRequest,
+    PreviewCategory, ProofOrderBindings, ReservationOffer, ReservationRequest,
+    ReservationRequestClaims,
 };
-use kage_types::assignment::{
-    ASSIGNMENT_TICKET_V1_DOMAIN, AssignmentTicketClaimsV1, AssignmentTicketV1, SolverAssignmentV1,
-    assignment_order_digest,
+use kage_types::routing::{
+    MultiRecipientProof, PROOF_ENVELOPE_SUITE, PreviewResponse, PreviewRoute, RecipientKeyWrap,
+    SolverProofDelivery,
 };
-use kage_types::orders::{OrderState, OrderV1, SolverJobV1};
 use uuid::Uuid;
 
-type AssignmentMutation = Box<dyn Fn(&mut AssignmentTicketClaimsV1)>;
-type TradeTermsMutation = Box<dyn Fn(&mut kage_types::orders::TradeTerms)>;
+#[test]
+fn complaint_response_preserves_the_evidence_class() {
+    let complaint = ComplaintResponse {
+        order_id: Uuid::from_u128(9),
+        status: ComplaintStatus::Verified,
+        evidence_kind: ComplaintEvidenceKind::NoResponseAfterDisclosure,
+        solver_id: Address::repeat_byte(0x33),
+        proof_expires_at_secs: 1_800_000_000,
+        nullifier_spent: false,
+        reason: "solver did not respond".to_owned(),
+        created_at_ms: 1_800_000_001_000,
+        updated_at_ms: 1_800_000_001_000,
+    };
+    let encoded = serde_json::to_value(&complaint).unwrap();
+    assert_eq!(encoded["evidence_kind"], "no_response_after_disclosure");
+    assert_eq!(
+        serde_json::from_value::<ComplaintResponse>(encoded).unwrap(),
+        complaint
+    );
+}
 
 #[test]
-fn order_snapshot_round_trips_without_losing_wire_fields() {
-    let order = OrderV1 {
-        id: Uuid::from_u128(1),
-        state: OrderState::AwaitingUserProof,
-        version: 5,
+fn preview_and_multi_recipient_order_round_trip() {
+    let route = PreviewRoute {
+        solver_id: Address::repeat_byte(0x33),
+        min_amount_in: U256::from(1_u64),
+        max_amount_in: U256::from(1_000_000_u64),
+        encryption_key_id: B256::repeat_byte(0x44),
+        encryption_public_key: vec![0x55; 32],
+        key_expires_at_ms: 1_800_000_060_000,
+    };
+    let preview = PreviewResponse {
+        preview_id: B256::repeat_byte(0x11),
         chain_id: 31_337,
-        token_in: Address::repeat_byte(0x11),
-        token_out: Address::repeat_byte(0x22),
+        token_in: Address::repeat_byte(0x12),
+        token_out: Address::repeat_byte(0x13),
+        token_in_decimals: 18,
+        token_out_decimals: 6,
         amount_in: U256::from(10_u64.pow(18)),
-        amount_out: U256::from(2_000_000_000_u64),
-        expires_at_ms: Some(1_800_000_000_000),
-        solver: Some(Address::repeat_byte(0x33)),
-        solver_noise_public_key: Some(vec![0x44; 32]),
+        midpoint_amount_out: U256::from(3_200_000_000_u64),
+        confidence_amount_out: U256::from(3_196_800_000_u64),
+        oracle_adjustment_bps: 10,
+        oracle_adjustment_amount: U256::from(3_200_000_u64),
+        valid_until_ms: 1_800_000_010_000,
+        recommended_proof_lifetime_seconds: 30,
+        minimum_remaining_seconds: 15,
+        categories: vec![PreviewCategory {
+            id: "major-50".to_owned(),
+            fee_bps: 50,
+            exact_amount_out: U256::from(3_180_816_000_u64),
+            fee_amount: U256::from(15_984_000_u64),
+            routes: vec![route.clone()],
+        }],
     };
-
-    let encoded = serde_json::to_string(&order).unwrap();
-    assert_eq!(serde_json::from_str::<OrderV1>(&encoded).unwrap(), order);
-}
-
-#[test]
-fn solver_job_contains_only_terms_needed_for_reservation() {
-    let job = SolverJobV1 {
-        id: Uuid::from_u128(2),
-        chain_id: 31_337,
-        token_in: Address::repeat_byte(0x11),
-        token_out: Address::repeat_byte(0x22),
-        amount_in: U256::from(1_000_u64),
-        amount_out: U256::from(2_000_u64),
-        expires_at_ms: Some(1_800_000_000_000),
+    let recipient = RecipientKeyWrap {
+        solver_id: route.solver_id,
+        key_id: route.encryption_key_id,
+        encapsulated_key: vec![0x66; 32],
+        wrapped_key: vec![0x77; 48],
     };
-
-    let encoded = serde_json::to_value(&job).unwrap();
-    assert!(encoded.get("state").is_none());
-    assert!(encoded.get("version").is_none());
-    assert!(encoded.get("solver").is_none());
-    assert!(encoded.get("solver_noise_public_key").is_none());
-    assert_eq!(serde_json::from_value::<SolverJobV1>(encoded).unwrap(), job);
-}
-
-#[test]
-fn create_order_message_round_trips() {
     let request = CreateOrderRequest {
-        order_commitment: B256::repeat_byte(0x55),
-        chain_id: 31_337,
-        token_in: Address::repeat_byte(0x11),
-        token_out: Address::repeat_byte(0x22),
-        amount_in: U256::from(1_000_u64),
-        amount_out: U256::from(2_000_u64),
-        ttl_seconds: Some(60),
+        client_order_id: Uuid::from_u128(9),
+        preview_id: preview.preview_id,
+        category_id: preview.categories[0].id.clone(),
+        domain_hash: B256::repeat_byte(0xdd),
+        terms: kage_types::orders::TradeTerms {
+            chain_id: preview.chain_id,
+            token_in: preview.token_in,
+            token_out: preview.token_out,
+            amount_in: U256::from(10_u64.pow(18)),
+            amount_out: U256::from(3_193_600_000_u64),
+            expires_at_ms: preview.valid_until_ms,
+        },
+        settlement_commitment: B256::repeat_byte(0xbb),
+        encrypted_proof: MultiRecipientProof {
+            suite: PROOF_ENVELOPE_SUITE.to_owned(),
+            nonce: vec![0x88; 24],
+            ciphertext: vec![0x99; 64],
+            ciphertext_digest: B256::repeat_byte(0xaa),
+            recipients: vec![recipient],
+        },
     };
-    let request = serde_json::to_value(request).unwrap();
-    assert_eq!(request["chain_id"], 31_337);
-    assert_eq!(request["ttl_seconds"], 60);
+
+    for value in [
+        serde_json::to_value(&preview).unwrap(),
+        serde_json::to_value(&request).unwrap(),
+    ] {
+        assert!(value.is_object());
+    }
+    let encoded = serde_json::to_vec(&request).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<CreateOrderRequest>(&encoded).unwrap(),
+        request
+    );
 }
 
 #[test]
@@ -81,113 +119,83 @@ fn empty_api_error_omits_missing_dependencies() {
     assert!(encoded.get("missing").is_none());
 }
 
-fn assignment_claims() -> AssignmentTicketClaimsV1 {
-    AssignmentTicketClaimsV1 {
-        order_id: Uuid::from_u128(3),
-        order_version: 7,
-        solver_id: Address::repeat_byte(0x33),
-        chain_id: 31_337,
-        order_digest: B256::repeat_byte(0x55),
-        solver_endpoint: "https://solver.kage.test/v1".to_owned(),
-        solver_noise_public_key: B256::repeat_byte(0x44),
-        issued_at_ms: 1_800_000_000_000,
-        expires_at_ms: 1_800_000_060_000,
-        nonce: B256::repeat_byte(0x66),
-    }
-}
-
 #[test]
-fn assignment_and_direct_proof_messages_round_trip() {
-    let claims = assignment_claims();
-    let order_id = claims.order_id;
-    let ticket = AssignmentTicketV1 {
-        claims,
-        signature: vec![0x77; 65],
-    };
-    let assignment = SolverAssignmentV1 {
-        ticket: ticket.clone(),
-    };
-    let request = DirectProofRequestV1 {
-        ticket,
-        ciphertext: vec![1, 2, 3],
-    };
-    let response = DirectProofResponseV1 {
-        order_id,
-        status: DirectProofStatusV1::Queued,
-    };
-
-    let assignment_json = serde_json::to_string(&assignment).unwrap();
-    let request_json = serde_json::to_string(&request).unwrap();
-    let response_json = serde_json::to_string(&response).unwrap();
-
-    assert_eq!(
-        serde_json::from_str::<SolverAssignmentV1>(&assignment_json).unwrap(),
-        assignment
-    );
-    assert_eq!(
-        serde_json::from_str::<DirectProofRequestV1>(&request_json).unwrap(),
-        request
-    );
-    assert_eq!(
-        serde_json::from_str::<DirectProofResponseV1>(&response_json).unwrap(),
-        response
-    );
-}
-
-#[test]
-fn assignment_signing_bytes_are_domain_separated_and_bind_every_claim() {
-    let claims = assignment_claims();
-    let original = claims.signing_bytes();
-    assert!(original.starts_with(ASSIGNMENT_TICKET_V1_DOMAIN));
-
-    let mutations: Vec<AssignmentMutation> = vec![
-        Box::new(|value| value.order_id = Uuid::from_u128(4)),
-        Box::new(|value| value.order_version += 1),
-        Box::new(|value| value.solver_id = Address::repeat_byte(0x34)),
-        Box::new(|value| value.chain_id += 1),
-        Box::new(|value| value.order_digest = B256::repeat_byte(0x56)),
-        Box::new(|value| value.solver_endpoint.push_str("/changed")),
-        Box::new(|value| value.solver_noise_public_key = B256::repeat_byte(0x45)),
-        Box::new(|value| value.issued_at_ms += 1),
-        Box::new(|value| value.expires_at_ms += 1),
-        Box::new(|value| value.nonce = B256::repeat_byte(0x67)),
-    ];
-
-    for mutate in mutations {
-        let mut changed = claims.clone();
-        mutate(&mut changed);
-        assert_ne!(changed.signing_bytes(), original);
-    }
-}
-
-#[test]
-fn assignment_order_digest_binds_every_trade_term_without_the_user_capability() {
+fn reservation_offer_and_delivery_round_trip_without_private_routing_hints() {
     let terms = kage_types::orders::TradeTerms {
         chain_id: 31_337,
-        token_in: Address::repeat_byte(0x11),
-        token_out: Address::repeat_byte(0x22),
-        amount_in: U256::from(1_000_u64),
-        amount_out: U256::from(2_000_u64),
-        expires_at_ms: 1_800_000_000_000,
+        token_in: Address::repeat_byte(1),
+        token_out: Address::repeat_byte(2),
+        amount_in: U256::from(100),
+        amount_out: U256::from(99),
+        expires_at_ms: 30_000,
     };
-    let original = assignment_order_digest(&terms);
+    let bindings = ProofOrderBindings {
+        order_id: Uuid::from_u128(10),
+        preview_id: B256::repeat_byte(3),
+        category_id: "major-50".to_owned(),
+        solver_id: Address::repeat_byte(4),
+        exact_terms_digest: B256::repeat_byte(5),
+        ciphertext_digest: B256::repeat_byte(6),
+        proof_expires_at_secs: 30,
+    };
+    let request = ReservationRequest {
+        claims: ReservationRequestClaims {
+            bindings: bindings.clone(),
+            attempt_nonce: B256::repeat_byte(7),
+            requested_at_ms: 1_000,
+            attempt_expires_at_ms: 3_000,
+        },
+        signature: vec![8; 65],
+    };
+    let offer = ReservationOffer {
+        request,
+        terms,
+        domain_hash: B256::repeat_byte(9),
+        fee_bps: 50,
+        settlement_commitment: B256::repeat_byte(10),
+    };
+    let offer_json = serde_json::to_value(&offer).unwrap();
+    assert!(offer_json.get("ciphertext").is_none());
+    assert!(offer_json.get("available_amount_out").is_none());
     assert_eq!(
-        original,
-        "0x6f03445ca575fc649ae64ce85e362455b7de75c19418d8da613e7776b72f26d6"
-            .parse::<B256>()
-            .unwrap()
+        serde_json::from_value::<ReservationOffer>(offer_json).unwrap(),
+        offer
     );
-    let mutations: Vec<TradeTermsMutation> = vec![
-        Box::new(|value| value.chain_id += 1),
-        Box::new(|value| value.token_in = Address::repeat_byte(0x12)),
-        Box::new(|value| value.token_out = Address::repeat_byte(0x23)),
-        Box::new(|value| value.amount_in += U256::from(1_u64)),
-        Box::new(|value| value.amount_out += U256::from(1_u64)),
-        Box::new(|value| value.expires_at_ms += 1),
-    ];
-    for mutate in mutations {
-        let mut changed = terms;
-        mutate(&mut changed);
-        assert_ne!(assignment_order_digest(&changed), original);
-    }
+
+    let ticket = AssignmentTicket {
+        claims: AssignmentTicketClaims {
+            bindings,
+            settlement_commitment: offer.settlement_commitment,
+            proof_encryption_key_id: B256::repeat_byte(11),
+            issued_at_ms: 2_000,
+            expires_at_ms: 30_000,
+            nonce: B256::repeat_byte(12),
+        },
+        signature: vec![13; 65],
+    };
+    let delivery = SolverProofDelivery {
+        suite: PROOF_ENVELOPE_SUITE.to_owned(),
+        order_id: offer.request.claims.bindings.order_id,
+        preview_id: offer.request.claims.bindings.preview_id,
+        category_id: offer.request.claims.bindings.category_id.clone(),
+        terms,
+        domain_hash: offer.domain_hash,
+        fee_bps: offer.fee_bps,
+        settlement_commitment: offer.settlement_commitment,
+        assignment_ticket: ticket,
+        nonce: vec![14; 24],
+        ciphertext: vec![15; 64],
+        ciphertext_digest: offer.request.claims.bindings.ciphertext_digest,
+        recipient: RecipientKeyWrap {
+            solver_id: offer.request.claims.bindings.solver_id,
+            key_id: B256::repeat_byte(11),
+            encapsulated_key: vec![16; 32],
+            wrapped_key: vec![17; 48],
+        },
+    };
+    let encoded = serde_json::to_vec(&delivery).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<SolverProofDelivery>(&encoded).unwrap(),
+        delivery
+    );
 }

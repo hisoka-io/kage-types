@@ -1,27 +1,45 @@
-use alloy_primitives::U256;
+use alloy_primitives::{Address, B256};
 use serde::{Deserialize, Serialize};
 
-use crate::assignment::AssignmentTicketV1;
 use crate::events::OrderEvent;
-use crate::identifiers::{OrderCommitment, OrderId, TokenAddress};
+use crate::identifiers::OrderId;
+use crate::proof_orders::ComplaintEvidenceKind;
 
-pub const ORDER_COMMITMENT_HEADER: &str = "x-order-commitment";
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CreateOrderRequest {
-    pub order_commitment: OrderCommitment,
-    pub chain_id: u64,
-    pub token_in: TokenAddress,
-    pub token_out: TokenAddress,
-    pub amount_in: U256,
-    pub amount_out: U256,
-    pub ttl_seconds: Option<u32>,
-}
+pub const ORDER_ACCESS_TOKEN_HEADER: &str = "x-order-access-token";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateOrderResponse {
     pub order_id: OrderId,
     pub expires_at_ms: i64,
+    pub created: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CreateComplaintRequest {
+    pub nullifier: B256,
+    pub salt: B256,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComplaintStatus {
+    Verified,
+    Rejected,
+    Resolved,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ComplaintResponse {
+    pub order_id: OrderId,
+    pub status: ComplaintStatus,
+    pub evidence_kind: ComplaintEvidenceKind,
+    pub solver_id: Address,
+    pub proof_expires_at_secs: u64,
+    pub nullifier_spent: bool,
+    pub reason: String,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,30 +51,11 @@ pub struct ApiErrorResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DirectProofRequestV1 {
-    pub ticket: AssignmentTicketV1,
-    pub ciphertext: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DirectProofStatusV1 {
-    Queued,
-    Duplicate,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DirectProofResponseV1 {
-    pub order_id: OrderId,
-    pub status: DirectProofStatusV1,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UserEventClientMessage {
     Subscribe {
         order_id: OrderId,
-        order_commitment: OrderCommitment,
+        access_token: B256,
     },
 }
 

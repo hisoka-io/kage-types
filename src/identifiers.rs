@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 pub type OrderId = Uuid;
 pub type TokenAddress = Address;
-pub type TxHash = B256;
 pub type SolverId = Address;
-pub type OrderCommitment = B256;
-pub type SettlementBinding = B256;
+pub type OrderAccessTokenHash = B256;
+pub type PreviewId = B256;
+pub type EncryptionKeyId = B256;

@@ -4,5 +4,5 @@ pub mod health;
 pub mod identifiers;
 pub mod orders;
 pub mod proof;
-pub mod registry;
-pub mod settlement;
+pub mod proof_orders;
+pub mod routing;
